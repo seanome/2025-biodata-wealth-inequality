@@ -136,6 +136,7 @@ def parse_uniprot_xml(
     with gzip.open(xml_file, "rb") as f:
         context = etree.iterparse(f, events=("end",), tag=f"{UNIPROT_NS}entry")
 
+        
         for event, elem in context:
             entry_count += 1
 
