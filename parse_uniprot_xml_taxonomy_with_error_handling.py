@@ -287,25 +287,96 @@ def process_uniprot_file(
     batch_size: int = 10000,
     n_batches=None,
     force_restart: bool = False,
+    save_interval: int = 1_000_000,  # Save every million entries
 ):
-    """Process UniProt XML file and write to Parquet with error handling."""
+    """Process UniProt XML file and write to Parquet with intermediate saves."""
     logging.info(f"Starting to process {input_file}")
-    Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Keep track of accumulated data and entry count
+    accumulated_data = []
+    total_entry_count = 0
+    save_count = 0
+    
     try:
-        # Process all batches and concatenate into a single LazyFrame
-        all_data = pl.concat(
-            [
-                process_batch(batch)
-                for batch in parse_uniprot_xml(
-                    input_file, batch_size, n_batches, force_restart=force_restart
+        # Process batches
+        for batch in parse_uniprot_xml(
+            input_file, batch_size, n_batches, force_restart=force_restart
+        ):
+            # Process batch and add to accumulated data
+            processed_batch = process_batch(batch)
+            accumulated_data.append(processed_batch)
+            total_entry_count += len(batch)
+            
+            # Check if we should save intermediate results
+            if total_entry_count >= (save_count + 1) * save_interval:
+                # Concatenate and process accumulated data
+                intermediate_data = pl.concat(accumulated_data)
+                
+                # Group and aggregate
+                intermediate_data = (
+                    intermediate_data.group_by(["organism", "organism_id", "lineage", "type"])
+                    .agg(
+                        [
+                            pl.col("reviewed_count").sum(),
+                            pl.col("unreviewed_count").sum(),
+                            pl.col("pdb_structures_count").sum(),
+                        ]
+                    )
                 )
-            ]
-        )
-
-        # Groupby organism and aggregate
-        all_data = (
-            all_data.group_by("organism")
+                
+                # Add taxonomic classifications
+                intermediate_data = add_taxonomic_classifications(intermediate_data)
+                
+                # Save intermediate results
+                intermediate_file = output_path.with_stem(f"{output_path.stem}_part_{save_count}")
+                intermediate_data.sink_parquet(
+                    intermediate_file,
+                    compression="zstd",
+                    compression_level=22,
+                    statistics=True,
+                    row_group_size=100000,
+                )
+                
+                logging.info(f"Saved intermediate results for {total_entry_count:,} entries to {intermediate_file}")
+                
+                # Clear accumulated data to free memory
+                accumulated_data = []
+                save_count += 1
+        
+        # Process any remaining data
+        if accumulated_data:
+            final_data = pl.concat(accumulated_data)
+            final_data = (
+                final_data.group_by(["organism", "organism_id", "lineage", "type"])
+                .agg(
+                    [
+                        pl.col("reviewed_count").sum(),
+                        pl.col("unreviewed_count").sum(),
+                        pl.col("pdb_structures_count").sum(),
+                    ]
+                )
+            )
+            final_data = add_taxonomic_classifications(final_data)
+            
+            # Save final part
+            final_part_file = output_path.with_stem(f"{output_path.stem}_part_{save_count}")
+            final_data.sink_parquet(
+                final_part_file,
+                compression="zstd",
+                compression_level=22,
+                statistics=True,
+                row_group_size=100000,
+            )
+        
+        # Combine all parts into final file
+        all_parts = list(output_path.parent.glob(f"{output_path.stem}_part_*"))
+        combined_data = pl.concat([pl.scan_parquet(part) for part in all_parts])
+        
+        # Final grouping and sorting
+        combined_data = (
+            combined_data.group_by("organism")
             .agg(
                 pl.col("reviewed_count").sum(),
                 pl.col("unreviewed_count").sum(),
@@ -314,81 +385,80 @@ def process_uniprot_file(
                 pl.col("lineage").first(),
                 pl.col("type").first(),
             )
-            # Add taxonomic classifications
-            .with_columns(
-                [
-                    pl.col("type")
-                    .map_dict(
-                        {
-                            "Bacteria": "Microbial",
-                            "Archaea": "Microbial",
-                            "Viruses": "Microbial",
-                            "Plant": "Plant",
-                            "Animal": "Animal",
-                            "Fungi": "Fungi",
-                            "other Eukaryota": "Other Eukaryota",
-                            "other": "Other",
-                        }
-                    )
-                    .alias("type_merge_microbes"),
-                    pl.col("type")
-                    .map_dict(
-                        {
-                            "Bacteria": "Cellular Life",
-                            "Archaea": "Cellular Life",
-                            "Viruses": "Non-cellular Life",
-                            "Plant": "Cellular Life",
-                            "Animal": "Cellular Life",
-                            "Fungi": "Cellular Life",
-                            "other Eukaryota": "Cellular Life",
-                            "other": "Cellular Life",
-                        }
-                    )
-                    .alias("superdomain"),
-                    pl.col("type")
-                    .map_dict(
-                        {
-                            "Bacteria": "Bacteria",
-                            "Archaea": "Archaea",
-                            "Viruses": "Viruses",
-                            "Plant": "Eukaryota",
-                            "Animal": "Eukaryota",
-                            "Fungi": "Eukaryota",
-                            "other Eukaryota": "Eukaryota",
-                            "other": "Eukaryota",
-                        }
-                    )
-                    .alias("domain"),
-                    pl.col("type")
-                    .map_dict(
-                        {
-                            "Bacteria": "Monera",
-                            "Archaea": "Monera",
-                            "Viruses": "Viruses",
-                            "Plant": "Plant",
-                            "Animal": "Animal",
-                            "Fungi": "Fungi",
-                            "other Eukaryota": "Other Eukaryota",
-                            "other": "Other",
-                        }
-                    )
-                    .alias("kingdom"),
-                ]
-            )
             .sort(["reviewed_count", "unreviewed_count"], descending=True)
         )
-
-        # Write to parquet file
-        all_data.sink_parquet(
+        
+        # Save final combined file
+        combined_data.sink_parquet(
             output_file,
             compression="zstd",
             compression_level=22,
             statistics=True,
             row_group_size=100000,
         )
-
-        logging.info(f"Processing complete. Results written to {output_file}")
-
+        
+        # Clean up intermediate files
+        for part_file in all_parts:
+            part_file.unlink()
+            
+        logging.info(f"Processing complete. Final results written to {output_file}")
+        
     except Exception as e:
         logging.error(f"Error during file processing: {e}")
         raise
+
+def add_taxonomic_classifications(df: pl.LazyFrame) -> pl.LazyFrame:
+    """Add taxonomic classification columns to the DataFrame."""
+    return df.with_columns([
+        pl.col("type")
+        .replace({
+            "Bacteria": "Microbial",
+            "Archaea": "Microbial",
+            "Viruses": "Microbial",
+            "Plant": "Plant",
+            "Animal": "Animal",
+            "Fungi": "Fungi",
+            "other Eukaryota": "Other Eukaryota",
+            "other": "Other",
+        })
+        .alias("type_merge_microbes"),
+        
+        pl.col("type")
+        .map_dict({
+            "Bacteria": "Cellular Life",
+            "Archaea": "Cellular Life",
+            "Viruses": "Non-cellular Life",
+            "Plant": "Cellular Life",
+            "Animal": "Cellular Life",
+            "Fungi": "Cellular Life",
+            "other Eukaryota": "Cellular Life",
+            "other": "Cellular Life",
+        })
+        .alias("superdomain"),
+        
+        pl.col("type")
+        .replace({
+            "Bacteria": "Bacteria",
+            "Archaea": "Archaea",
+            "Viruses": "Viruses",
+            "Plant": "Eukaryota",
+            "Animal": "Eukaryota",
+            "Fungi": "Eukaryota",
+            "other Eukaryota": "Eukaryota",
+            "other": "Eukaryota",
+        })
+        .alias("domain"),
+        
+        pl.col("type")
+        .replace({
+            "Bacteria": "Monera",
+            "Archaea": "Monera",
+            "Viruses": "Viruses",
+            "Plant": "Plant",
+            "Animal": "Animal",
+            "Fungi": "Fungi",
+            "other Eukaryota": "Other Eukaryota",
+            "other": "Other",
+        })
+        .alias("kingdom"),
+    ])
