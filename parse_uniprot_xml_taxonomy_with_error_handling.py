@@ -329,14 +329,18 @@ def process_uniprot_file(
                 # Add taxonomic classifications
                 intermediate_data = add_taxonomic_classifications(intermediate_data)
                 
-                # Save intermediate results
+                # Save intermediate results using write_parquet with streaming engine
                 intermediate_file = output_path.with_stem(f"{output_path.stem}_part_{save_count}")
-                intermediate_data.sink_parquet(
-                    intermediate_file,
-                    compression="zstd",
-                    compression_level=22,
-                    statistics=True,
-                    row_group_size=100000,
+                (
+                    intermediate_data
+                    .collect(streaming=True)
+                    .write_parquet(
+                        intermediate_file,
+                        compression="zstd",
+                        compression_level=22,
+                        statistics=True,
+                        row_group_size=100000,
+                    )
                 )
                 
                 logging.info(f"Saved intermediate results for {total_entry_count:,} entries to {intermediate_file}")
@@ -360,14 +364,18 @@ def process_uniprot_file(
             )
             final_data = add_taxonomic_classifications(final_data)
             
-            # Save final part
+            # Save final part using streaming engine
             final_part_file = output_path.with_stem(f"{output_path.stem}_part_{save_count}")
-            final_data.sink_parquet(
-                final_part_file,
-                compression="zstd",
-                compression_level=22,
-                statistics=True,
-                row_group_size=100000,
+            (
+                final_data
+                .collect(streaming=True)
+                .write_parquet(
+                    final_part_file,
+                    compression="zstd",
+                    compression_level=22,
+                    statistics=True,
+                    row_group_size=100000,
+                )
             )
         
         # Combine all parts into final file
@@ -375,8 +383,9 @@ def process_uniprot_file(
         combined_data = pl.concat([pl.scan_parquet(part) for part in all_parts])
         
         # Final grouping and sorting
-        combined_data = (
-            combined_data.group_by("organism")
+        (
+            combined_data
+            .group_by("organism")
             .agg(
                 pl.col("reviewed_count").sum(),
                 pl.col("unreviewed_count").sum(),
@@ -386,15 +395,14 @@ def process_uniprot_file(
                 pl.col("type").first(),
             )
             .sort(["reviewed_count", "unreviewed_count"], descending=True)
-        )
-        
-        # Save final combined file
-        combined_data.sink_parquet(
-            output_file,
-            compression="zstd",
-            compression_level=22,
-            statistics=True,
-            row_group_size=100000,
+            .collect(streaming=True)
+            .write_parquet(
+                output_file,
+                compression="zstd",
+                compression_level=22,
+                statistics=True,
+                row_group_size=100000,
+            )
         )
         
         # Clean up intermediate files
@@ -424,7 +432,7 @@ def add_taxonomic_classifications(df: pl.LazyFrame) -> pl.LazyFrame:
         .alias("type_merge_microbes"),
         
         pl.col("type")
-        .map_dict({
+        .replace({
             "Bacteria": "Cellular Life",
             "Archaea": "Cellular Life",
             "Viruses": "Non-cellular Life",

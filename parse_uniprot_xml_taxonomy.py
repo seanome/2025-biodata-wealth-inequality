@@ -77,6 +77,7 @@ def create_entry_dict(elem) -> Optional[Dict]:
         return None
 
     lineage = get_lineage_set(organism.find(f".//{UNIPROT_NS}lineage"))
+    has_structure = has_pdb_structure(elem)
 
     return {
         "organism": sci_name,
@@ -85,7 +86,7 @@ def create_entry_dict(elem) -> Optional[Dict]:
         "type": classify_organism(lineage),
         "reviewed": elem.get("dataset") == "Swiss-Prot",
         "unreviewed": elem.get("dataset") == "TrEMBL",
-        "has_structure": has_pdb_structure(elem),
+        "has_structure": has_structure,
     }
 
 
