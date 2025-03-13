@@ -1,0 +1,16 @@
+name: 2025-biodata-wealth-inequality-r
+channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - r-base
+  - r-essentials
+  - r-ggplot2
+  - r-irkernel
+  - r-rcolorbrewer
+  - r::r-tidyverse
+  - r::r-formatr
+  - r::r-devtools
+  - r-arrow
+  - r-ggrepel
+prefix: /Users/olga/anaconda3/envs/2025-biodata-wealth-inequality-r
