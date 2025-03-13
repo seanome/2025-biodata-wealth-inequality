@@ -1,0 +1,35 @@
+{
+  "name": "2025-biodata-wealth-inequality",
+  "@context": "https://w3id.org/codemeta/3.0",
+  "author": [
+    {
+      "affiliation": {
+        "name": "Seanome",
+        "type": "Organization"
+      },
+      "email": "olga@seanome.org",
+      "familyName": "Botvinnik",
+      "id": "https://orcid.org/0000-0003-4412-7970",
+      "givenName": "Olga",
+      "type": "Person"
+    },
+    {
+      "roleName": "Developer",
+      "startDate": "2025-02-13",
+      "schema:author": "https://orcid.org/0000-0003-4412-7970",
+      "type": "Role"
+    }
+  ],
+  "dateCreated": "2025-02-13",
+  "description": "Code to create figures showing wealth inequality of biological sequence data in the Protein Data Bank (PDB), UniProtKB/SwissProt, UniProtKB/TREMBL (AlphaFoldDB), and all predicted number of proteins on Earth.",
+  "keywords": [
+    "biodiversity",
+    "uniprot"
+  ],
+  "license": "https://spdx.org/licenses/MIT",
+  "programmingLanguage": [
+    "Python 3"
+  ],
+  "schema:releaseNotes": ".",
+  "type": "SoftwareSourceCode"
+}

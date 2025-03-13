@@ -1,0 +1,16 @@
+title: 2025-biodata-wealth-inequality
+authors:
+  - given-names: Olga
+    family-names: Botvinnik
+    email: olga@seanome.org
+    affiliation: Seanome
+cff-version: 1.2.0
+message: If you use this software, please cite it using the metadata from this file.
+type: software
+abstract: Code to create figures showing wealth inequality of biological
+  sequence data in the Protein Data Bank (PDB), UniProtKB/SwissProt,
+  UniProtKB/TREMBL (AlphaFoldDB), and all predicted number of proteins on Earth.
+keywords:
+  - biodiversity
+  - uniprot
+license: MIT
