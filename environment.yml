@@ -1,0 +1,23 @@
+name: 2025-biodata-wealth-inequality
+channels:
+  - https://repo.anaconda.com/pkgs/main
+  - https://repo.anaconda.com/pkgs/r
+dependencies:
+  - polars
+  - ipykernel
+  - lxml
+  - ipywidgets
+  - plotly
+  - plotly_express
+  - pyarrow
+  - nbformat[version='>=4.2.0']
+  - jupyterlab
+  - matplotlib
+  - seaborn
+  - squarify
+  - pypalettes
+  - highlight_text
+  - click
+  - tabulate
+  - dsh-bio
+prefix: /Users/olga/anaconda3/envs/2025-biodata-wealth-inequality
