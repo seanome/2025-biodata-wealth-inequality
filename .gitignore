@@ -1,7 +1,12 @@
 # UniProt XML gz files
 *.xml.gz
+
+# Ignore big files produced by the `uniprot` tool from https://github.com/heuermh/dishevelled-bio
 *.tsv
 *.tsv.gz
+# This file has one UniProt entry per line from TREMBL, which is 250 M entries (!)
+# We will rely on processing via the `uniprot` tool
+*uniprot_trembl_entries*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
